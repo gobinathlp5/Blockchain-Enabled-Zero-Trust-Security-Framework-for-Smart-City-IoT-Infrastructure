@@ -1,0 +1,290 @@
+# PARAGRAPHS
+1. Project Overview
+This project implements a Blockchain and Zero Trust Architecture (ZTA) security framework on two ESP32 microcontrollers to protect simulated smart city IoT infrastructure from cyber threats. ESP32 #1 acts as a multi-role IoT sensor simulator generating signed data packets. ESP32 #2 acts as a Zero Trust Gateway that verifies every incoming message and logs approved data on an on-device blockchain ledger.
+1.1 Core Objectives
+Demonstrate Zero Trust authentication on resource-constrained IoT hardware
+Implement HMAC-SHA256 cryptographic signing on every data transmission
+Build a SHA-256 hash-chain blockchain ledger entirely on ESP32
+Simulate real smart city attack scenarios: rogue devices, tampered data, DDoS flooding
+Show real-time security decisions on Serial Monitor as an admin dashboard
+1.2 Why Two ESP32s With No Sensors
+Removing the physical DHT11 sensor eliminates hardware dependency and makes the demo fully software-controlled. ESP32 #1 can now simulate any smart city device type — environmental sensor, traffic monitor, smart meter — by simply changing the data payload. This approach lets the demonstration focus entirely on the security layer, which is the core contribution of the case scenario.
+2. System Architecture
+2.1 Device Role Assignment
+2.2 Three-Layer Architecture
+2.3 Data Flow Summary
+ESP32 #1 cycles through four roles every 30 seconds: Environmental Node → Traffic Node → Smart Meter Node → Rogue Device
+Each legitimate message is signed with HMAC-SHA256 before transmission
+ESP32 #2 runs three Zero Trust checks on every received message
+Passing messages are hashed and appended as a new blockchain block
+Failing messages trigger a quarantine alert logged to Serial Monitor
+3. Simulated Device Types
+ESP32 #1 simulates four distinct device identities. Each has a unique Device ID, data payload, and behavior pattern.
+4. Phase-by-Phase Implementation Plan
+Objective
+Establish reliable WiFi communication between both ESP32 boards using MQTT protocol. Verify that messages sent by ESP32 #1 are received by ESP32 #2 before any security code is added.
+Steps
+Objective
+Program ESP32 #1 to generate realistic fake smart city data and cycle through all three legitimate device roles automatically.
+Steps
+Objective
+Add HMAC-SHA256 signing to every outgoing message on ESP32 #1. This is the Zero Trust identity proof — only a device knowing the secret key can produce a valid signature.
+Steps
+Objective
+Implement the full Zero Trust verification pipeline on ESP32 #2. Every incoming message must pass all three checks sequentially or be denied.
+The Three Zero Trust Checks
+Steps
+Objective
+Every message that passes Zero Trust verification is appended as a new block to the blockchain ledger stored in ESP32 #2 RAM. Each block contains a SHA-256 hash linking it to the previous block, making tampering detectable.
+Steps
+Objective
+Program ESP32 #1 to simulate all attack types from the case scenario in a scripted 40-second demonstration sequence. This is the final proof-of-concept run.
+Demo Sequence Timeline
+Attack Types Demonstrated
+Unauthorized Device Access — ROGUE_DEVICE_999 blocked at Check 1
+Data Tampering — Modified payload breaks HMAC signature at Check 2
+DDoS / Botnet Flooding — Mass message burst triggers rate limiter at Check 3
+Blockchain Integrity — Chain validation proves no past records were altered
+Objective
+Validate all system components, capture evidence, and prepare the project for hackathon submission, academic presentation, or research paper.
+Validation Checklist
+Documentation Deliverables
+Serial Monitor screenshots showing authentication decisions
+Blockchain print showing all blocks with hash values
+Attack simulation output showing all three denial scenarios
+This workflow document as project report
+GitHub repository with commented source code for both ESP32s
+5. Case Scenario Alignment
+Every requirement stated in the original case scenario is directly addressed by this prototype.
+6. Summary Timeline
+7. Future Scope
+Add a third ESP32 node to simulate a multi-device smart city network
+Integrate Raspberry Pi as a full Hyperledger Fabric blockchain node
+Build a Python web dashboard for visual real-time monitoring
+Add OLED display to ESP32 #2 for on-device status LED indicators
+Extend CAN Bus communication using existing MCP2515 modules
+Submit findings as a research paper targeting IEEE IoT or embedded security conferences
+Explore FPGA-based hardware security module (HSM) for key storage
+
+# TABLES
+
+## TABLE 1
+BLOCKCHAIN + ZERO TRUST ARCHITECTURE | Securing Smart City IoT Infrastructure | Phase Plan & Implementation Workflow  |  ESP32 Prototype
+
+## TABLE 2
+Project || Blockchain-Enabled Zero Trust Security for Smart City IoT
+Hardware || 2x ESP32 DevKit (No external sensors required)
+Approach || ESP32 #1 generates simulated smart city data | ESP32 #2 acts as ZTA Gateway + Blockchain Node
+Domain || IoT Security | Embedded Systems | Cybersecurity
+Document || Phase Plan & Implementation Workflow
+
+## TABLE 3
+ || Key Insight | The DHT11 provides data. The security architecture is what protects that data. By generating fake data programmatically, we can simulate every attack scenario described in the case without any additional hardware cost.
+
+## TABLE 4
+Device || Role || Function || Communication
+ESP32 #1 || IoT Simulator Node || Generates signed fake data for 3 device types + rogue attack || WiFi MQTT Publisher
+ESP32 #2 || ZTA Gateway + Blockchain || Verifies all messages, logs approved data to blockchain || WiFi MQTT Subscriber
+Laptop/PC || Admin Monitor || Displays real-time gateway decisions via Serial Monitor || USB Serial (115200 baud)
+
+## TABLE 5
+Layer || Component || Responsibility
+Layer 1 — Device || ESP32 #1 || Generate data, sign cryptographically, transmit via MQTT
+Layer 2 — Security || ESP32 #2 || Zero Trust checks, blockchain logging, quarantine management
+Layer 3 — Monitor || Serial Monitor || Real-time display of all auth decisions and blockchain state
+
+## TABLE 6
+Device ID || Type || Fake Data Fields || Behavior
+ENV_NODE_001 || Environmental Sensor || temperature, humidity, aqi, co2_ppm || Legitimate — signed correctly
+TRAFFIC_NODE_001 || Traffic Monitor || vehicle_count, avg_speed_kmh, congestion || Legitimate — signed correctly
+METER_NODE_001 || Smart Energy Meter || power_kw, voltage_v, current_amp || Legitimate — signed correctly
+ROGUE_DEVICE_999 || Unauthorized Node || garbage values — no valid signature || Attack — denied by gateway
+
+## TABLE 7
+PHASE1 || Environment Setup & Communication Baseline || Duration | Hour 1
+
+## TABLE 8
+STEP 1.1 || Install Required Libraries
+Libraries || PubSubClient (MQTT) | ArduinoJson | WiFi (built-in ESP32)
+Install via || Arduino IDE → Library Manager → Search each name
+
+## TABLE 9
+STEP 1.2 || Configure ESP32 #2 as WiFi Access Point
+Purpose || ESP32 #2 creates its own hotspot so ESP32 #1 connects directly — no router needed
+Config || SSID: SmartCityGateway | Password: securepass123 | Gateway IP: 192.168.4.1
+Verify || Open Serial Monitor on ESP32 #2 — confirm IP address is displayed on boot
+
+## TABLE 10
+STEP 1.3 || Connect ESP32 #1 to ESP32 #2 Hotspot
+Purpose || ESP32 #1 joins the gateway's hotspot and sends a plain test message
+MQTT Topic || smartcity/test
+Expected Output || ESP32 #2 Serial Monitor shows: Message received: Hello from Node 001
+
+## TABLE 11
+ || Phase 1 Success Criteria | Both ESP32s are communicating. Serial Monitor on ESP32 #2 shows incoming test messages from ESP32 #1 every 5 seconds.
+
+## TABLE 12
+PHASE2 || Fake Data Generation on ESP32 #1 || Duration | Hour 2
+
+## TABLE 13
+STEP 2.1 || Implement Data Generator Function
+ENV_NODE_001 || temperature: random 25.0–40.0°C | humidity: 40–80% | aqi: 60–150 | co2: 400–600 ppm
+TRAFFIC_NODE || vehicle_count: 10–80 | avg_speed: 20–80 km/h | congestion: low / medium / high
+METER_NODE || power_kw: 1.0–8.0 | voltage_v: 220–240 | current_amp: 5–35
+Method || Use random() with realistic ranges — no DHT11 or external sensor required
+
+## TABLE 14
+STEP 2.2 || Cycle Through Device Roles
+Timing || Send ENV data at T=0s, TRAFFIC at T=10s, METER at T=20s, repeat
+JSON Format || { "device": "ENV_NODE_001", |   "type": "environmental", |   "data": { "temperature": 31.4, "humidity": 65 }, |   "timestamp": 10234 }
+Output || Serial Monitor on ESP32 #1 shows which device role is currently active
+
+## TABLE 15
+ || Phase 2 Success Criteria | ESP32 #1 prints three different device payloads cycling every 10 seconds. ESP32 #2 receives and displays all three raw messages.
+
+## TABLE 16
+PHASE3 || Cryptographic Signing — HMAC-SHA256 || Duration | Hour 3
+
+## TABLE 17
+STEP 3.1 || Implement HMAC-SHA256 on ESP32 #1
+Library || mbedtls/md.h — built into ESP32 Arduino core, no installation needed
+Input || Full JSON payload string + device secret key
+Output || 64-character hexadecimal signature appended to message
+Each device has its own unique secret key stored in firmware || 
+
+## TABLE 18
+STEP 3.2 || Attach Signature to Message
+Format || { "data": { ...payload... }, |   "sig": "3f7a2b9c4e1d..." }
+Rule || Signature is computed over the full data object as a string before transmission
+
+## TABLE 19
+STEP 3.3 || Assign Secret Keys Per Device Role
+ENV_NODE_001 || Secret Key: env_secret_key_2025
+TRAFFIC_NODE_001 || Secret Key: traffic_secret_key_2025
+METER_NODE_001 || Secret Key: meter_secret_key_2025
+ROGUE_DEVICE_999 || No valid key — sends fake or empty signature intentionally
+
+## TABLE 20
+ || Phase 3 Success Criteria | Every message from ESP32 #1 arrives at ESP32 #2 with a 64-character signature field. Manually modifying any character in the payload breaks the signature.
+
+## TABLE 21
+PHASE4 || Zero Trust Gateway on ESP32 #2 || Duration | Hour 4
+
+## TABLE 22
+Check || Verification || Fail Action || Represents
+Check 1 || Device ID in registered list? || Deny — Unknown Device || Device registration / identity
+Check 2 || HMAC signature matches payload? || Deny + Quarantine — Bad Signature || Data integrity + authentication
+Check 3 || Message rate within allowed limit? || Deny + Quarantine — Rate Exceeded || DDoS / botnet detection
+
+## TABLE 23
+STEP 4.1 || Build Device Registry
+Storage || Hardcoded struct array on ESP32 #2 containing all registered device IDs and their secret keys
+Fields || device_id, secret_key, max_messages_per_minute
+Registered || ENV_NODE_001 | TRAFFIC_NODE_001 | METER_NODE_001
+Not Registered || ROGUE_DEVICE_999 — will be rejected at Check 1
+
+## TABLE 24
+STEP 4.2 || Implement Signature Verification
+Process || Recompute HMAC-SHA256 using stored secret key for that device ID
+Compare || Expected signature vs received signature — must match exactly
+On Fail || Add device to quarantine list, print alert to Serial Monitor
+
+## TABLE 25
+STEP 4.3 || Implement Rate Limiter
+Method || Track timestamp array of last N messages per device
+Threshold || More than 20 messages in 60 seconds = rate limit breach
+On Breach || Quarantine device, print DDoS alert to Serial Monitor
+
+## TABLE 26
+STEP 4.4 || Implement Quarantine List
+Storage || Boolean array indexed by device slot
+Effect || Quarantined devices fail Check 1 on all future messages
+Reset || Quarantine clears on ESP32 reboot (by design for prototype)
+
+## TABLE 27
+ || Phase 4 Success Criteria | Legitimate devices are authenticated and pass through. Rogue device messages print DENIED. Tampered messages print QUARANTINED. Rate flood triggers DDoS alert.
+
+## TABLE 28
+PHASE5 || Blockchain Ledger on ESP32 #2 || Duration | Hour 5
+
+## TABLE 29
+STEP 5.1 || Define Block Structure
+Fields || block_index | device_id | data_hash (SHA-256 of payload) | previous_hash | timestamp (millis())
+Storage || Array of 100 block structs in ESP32 RAM
+Genesis Block || Block #0 created at boot with previous_hash = 0000000000000000
+
+## TABLE 30
+STEP 5.2 || Implement Block Addition
+Trigger || Called immediately after a message passes all three Zero Trust checks
+Hash Input || Concatenate: block_index + device_id + payload + previous_hash
+Hash Output || SHA-256 of above string using mbedtls — becomes this block's hash
+Chain || This block's hash becomes previous_hash for the next block
+
+## TABLE 31
+STEP 5.3 || Implement Chain Integrity Checker
+When || Run on demand — triggered by sending special command via Serial
+Method || Re-compute every block's hash from stored data — compare to stored hash
+Output || All blocks valid — Chain intact (SECURE) | Block #N hash mismatch — Tamper detected (ALERT)
+
+## TABLE 32
+STEP 5.4 || Print Blockchain State
+Command || Send 'SHOW_CHAIN' via Serial to ESP32 #2
+Output Format || BLOCK #0 | GENESIS | Hash: 0000000000000000 | BLOCK #1 | ENV_NODE_001 | Temp:31.4 | Hash: a3f9c2d7... | BLOCK #2 | TRAFFIC_NODE | Vehicles:47 | Hash: 7b2e1f4a...
+
+## TABLE 33
+ || Phase 5 Success Criteria | Each verified message adds a visible block. Printing chain shows all blocks with hashes. Chain integrity check confirms all hashes are valid.
+
+## TABLE 34
+PHASE6 || Attack Simulation & Full Demo Run || Duration | Hour 6
+
+## TABLE 35
+Time || Event || Sender || Expected Gateway Output
+T = 0s || ENV_NODE_001 sends legitimate data || ESP32 #1 || ✅ Authenticated | Block #1 added
+T = 10s || TRAFFIC_NODE_001 sends legitimate data || ESP32 #1 || ✅ Authenticated | Block #2 added
+T = 20s || METER_NODE_001 sends legitimate data || ESP32 #1 || ✅ Authenticated | Block #3 added
+T = 25s || ROGUE_DEVICE_999 sends forged message || ESP32 #1 || 🚫 DENIED — Unknown Device
+T = 28s || ENV_NODE_001 sends tampered payload || ESP32 #1 || 🚫 DENIED — Bad Signature → QUARANTINED
+T = 32s || METER_NODE_001 floods with 30 messages || ESP32 #1 || 🚫 QUARANTINED — Rate Limit Exceeded
+T = 38s || TRAFFIC_NODE sends legitimate data again || ESP32 #1 || ✅ Authenticated | Block #4 added
+T = 40s || Show blockchain integrity check || Command || ✅ All 4 blocks valid — Chain intact
+
+## TABLE 36
+ || Phase 6 Success Criteria | Full 40-second sequence runs without manual intervention. All four attack scenarios are visibly blocked. Blockchain contains exactly 4 verified blocks at end of demo.
+
+## TABLE 37
+PHASE7 || Validation, Documentation & Submission || Duration | Hour 7
+
+## TABLE 38
+Item || Test || Pass Condition
+Authentication || Send message with wrong signature || Gateway prints QUARANTINED
+Registration || Send from ROGUE_DEVICE_999 || Gateway prints DENIED — Unknown Device
+Rate Limiting || Send 30 messages in 10 seconds || Gateway prints Rate Limit Exceeded
+Blockchain || Add 5 blocks then run integrity check || All blocks valid — Chain intact
+Tamper Test || Manually alter stored block hash || Integrity check reports mismatch
+Recovery || Send legitimate message after attack || Gateway accepts and logs normally
+
+## TABLE 39
+Case Scenario Requirement || This Prototype
+Resource-constrained IoT devices || ESP32 — low-power microcontroller, limited RAM/CPU
+Environmental sensors in smart city || ESP32 #1 simulates ENV_NODE_001 with realistic sensor data
+Thousands of devices on a shared network || Architecture scales — add more ESP32 nodes with same code
+Unauthorized device access prevention || Check 1: Unregistered devices denied immediately
+Data tamper prevention || Check 2: HMAC signature detects any payload modification
+DDoS and botnet detection || Check 3: Rate limiter detects flooding behavior
+Blockchain tamper-resistant recording || SHA-256 hash chain on ESP32 #2 — any alteration breaks chain
+Zero Trust continuous verification || All three checks run on every single message, not just login
+Centralized security monitoring || Serial Monitor provides real-time admin view of all decisions
+Automatic threat response || Quarantine triggers automatically without human intervention
+
+## TABLE 40
+Phase || Focus || Hour || Output
+Phase 1 || Environment & Communication || Hour 1 || Two ESP32s exchanging plain messages via WiFi MQTT
+Phase 2 || Fake Data Generation || Hour 2 || ESP32 #1 cycling through 3 device types with realistic data
+Phase 3 || Cryptographic Signing || Hour 3 || HMAC-SHA256 signature on every message
+Phase 4 || Zero Trust Gateway || Hour 4 || Full 3-check verification pipeline on ESP32 #2
+Phase 5 || Blockchain Ledger || Hour 5 || SHA-256 hash chain logging all verified messages
+Phase 6 || Attack Simulation & Demo || Hour 6 || 40-second scripted demo covering all 4 attack scenarios
+Phase 7 || Validation & Documentation || Hour 7 || Test report, screenshots, GitHub code, submission ready
+
+## TABLE 41
+ || Total Cost | 2x ESP32 DevKit (~₹900 total) + USB cables (already available) + Laptop for Serial Monitor (already available). No additional hardware required.
