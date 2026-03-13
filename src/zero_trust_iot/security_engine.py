@@ -1,12 +1,12 @@
 import hashlib
 import hmac
 import json
+import math
+import statistics
 import time
 from collections import defaultdict, deque
 
-import numpy as np
 import paho.mqtt.client as mqtt
-from sklearn.ensemble import IsolationForest
 
 from .config import (
     AUTHORIZED_DEVICES,
@@ -21,65 +21,50 @@ from .config import (
 blockchain = []
 previous_hash = "0000"
 
-# ── ML: Per-device data history ──────────────────────────────────────────────
+# ── ML: Per-device data history (pure Python, no extra packages) ──────────────
 MIN_SAMPLES = 15  # minimum messages before ML activates
 
-device_msg_times = defaultdict(lambda: deque(maxlen=50))   # for rate anomaly
-device_temp_hist = defaultdict(lambda: deque(maxlen=50))   # for z-score
-device_hum_hist  = defaultdict(lambda: deque(maxlen=50))   # for z-score
-isolation_models = {}                                       # device_id -> IsolationForest
+device_msg_times = defaultdict(lambda: deque(maxlen=50))   # timestamps for rate anomaly
+device_temp_hist = defaultdict(lambda: deque(maxlen=50))   # temperature history
+device_hum_hist  = defaultdict(lambda: deque(maxlen=50))   # humidity history
 
 
-def _rate_features(times):
-    """Compute [mean, std, min] of inter-message intervals from a list of timestamps."""
-    if len(times) < 2:
-        return None
-    intervals = [times[i + 1] - times[i] for i in range(len(times) - 1)]
-    return [np.mean(intervals), np.std(intervals), np.min(intervals)]
-
-
-def _train_isolation_forest(device_id):
-    """(Re)train IsolationForest on all collected rate windows for a device."""
-    times = list(device_msg_times[device_id])
-    if len(times) < MIN_SAMPLES + 1:
-        return
-    features = []
-    for i in range(2, len(times) + 1):
-        window = times[max(0, i - 10):i]
-        feat = _rate_features(window)
-        if feat:
-            features.append(feat)
-    if len(features) < MIN_SAMPLES:
-        return
-    model = IsolationForest(contamination=0.1, random_state=42)
-    model.fit(features)
-    isolation_models[device_id] = model
+def _zscore(value, history):
+    """Return z-score of value against a history list.
+    Uses a sigma floor of 0.5 so identical baselines still catch extreme outliers
+    while near-normal variation (e.g. +/-1 unit) is not mis-flagged.
+    """
+    if len(history) < MIN_SAMPLES:
+        return 0.0
+    mu  = statistics.mean(history)
+    sig = max(statistics.pstdev(history), 0.5)  # floor avoids near-zero sigma issue
+    return abs(value - mu) / sig
 
 
 def _check_rate_anomaly(device_id):
-    """Return True if the current message rate pattern is anomalous."""
-    if device_id not in isolation_models:
-        return False
+    """
+    Rolling inter-arrival anomaly: flag if the latest interval is an extreme
+    outlier (z-score > 3) compared to the device's own interval history.
+    Returns True = anomalous (burst / flood).
+    """
     times = list(device_msg_times[device_id])
-    feat = _rate_features(times[-10:])
-    if feat is None:
+    if len(times) < MIN_SAMPLES + 1:
         return False
-    return isolation_models[device_id].predict([feat])[0] == -1
+    intervals = [times[i + 1] - times[i] for i in range(len(times) - 1)]
+    latest    = intervals[-1]
+    baseline  = intervals[:-1]
+    return _zscore(latest, baseline) > 3.0
 
 
 def _check_payload_anomaly(device_id, temp, hum):
-    """Z-score check: flag values > 3 std deviations from device's own history."""
+    """Z-score payload check: flag values > 3 std deviations from device history."""
     reasons = []
-    if len(device_temp_hist[device_id]) >= MIN_SAMPLES:
-        arr = np.array(device_temp_hist[device_id])
-        z = abs(temp - arr.mean()) / (arr.std() + 1e-6)
-        if z > 3:
-            reasons.append(f"TEMP_ANOMALY(z={z:.1f})")
-    if len(device_hum_hist[device_id]) >= MIN_SAMPLES:
-        arr = np.array(device_hum_hist[device_id])
-        z = abs(hum - arr.mean()) / (arr.std() + 1e-6)
-        if z > 3:
-            reasons.append(f"HUM_ANOMALY(z={z:.1f})")
+    z_temp = _zscore(temp, list(device_temp_hist[device_id]))
+    z_hum  = _zscore(hum,  list(device_hum_hist[device_id]))
+    if z_temp > 3:
+        reasons.append(f"TEMP_ANOMALY(z={z_temp:.1f})")
+    if z_hum > 3:
+        reasons.append(f"HUM_ANOMALY(z={z_hum:.1f})")
     return reasons
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -156,7 +141,6 @@ def on_message(client, userdata, msg):
     device_msg_times[device].append(time.time())
     device_temp_hist[device].append(temp)
     device_hum_hist[device].append(hum)
-    _train_isolation_forest(device)   # no-op until MIN_SAMPLES reached
     # ─────────────────────────────────────────────────────────────────────────
 
     if not verify_signature(message, signature):
