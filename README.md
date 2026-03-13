@@ -279,6 +279,7 @@ Current behavior:
 - Each legitimate role has its own HMAC-SHA256 secret key
 - Gateway runs as WiFi Access Point, embedded MQTT broker, Zero Trust verifier, and blockchain node
 - Gateway maintains a device registry, rate-limit tracking, quarantine state, and hash-chain ledger in RAM
+- Gateway now publishes each verification decision to dashboard topic `zerotrust/gobinath/iot/verified`
 
 Required Arduino libraries:
 
@@ -291,6 +292,12 @@ Upload order:
 1. Flash `gateway_node.ino` to ESP32 #2 and open Serial Monitor
 2. Flash `sensor_node.ino` to ESP32 #1
 3. Observe Zero Trust verification and block creation logs on gateway Serial output
+4. Run the Python dashboard (`python scripts/run_dashboard.py`) and watch live events
+
+Dashboard integration notes:
+
+- Preferred: use the updated `gateway_node.ino` (direct MQTT publish to dashboard topic)
+- Fallback for older gateway firmware: run `python scripts/run_esp32_bridge.py --port COMx` on the **gateway** serial port
 
 Sensor node Serial commands:
 

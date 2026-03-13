@@ -1,4 +1,5 @@
 from collections import deque
+import datetime
 import json
 
 import dash
@@ -50,12 +51,8 @@ def on_message(client, userdata, msg):
     event_hash = payload["event_hash"]
     device_type = payload.get("device_type", "unknown")
     payload_preview = payload.get("payload_preview", "No payload summary")
-    event_time = pd.to_datetime(payload["timestamp"], unit="s", errors="coerce")
-
-    if pd.isna(event_time):
-        event_time = pd.Timestamp.now()
-
-    time_data.append(event_time)
+    # Use laptop local time — ESP32 has no RTC/NTP so its timestamp is unreliable
+    time_data.append(pd.Timestamp(datetime.datetime.now()))
     temp_data.append(temperature)
     hum_data.append(humidity)
     status_data.append("Valid" if verified else "Tampered")

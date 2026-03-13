@@ -277,7 +277,9 @@ void ensureMqtt()
             return;
         }
 
-        Serial.println("retrying in 1s");
+        Serial.print("failed (state=");
+        Serial.print(mqttClient.state());
+        Serial.println(") -> retrying in 1s");
         delay(1000);
     }
 }

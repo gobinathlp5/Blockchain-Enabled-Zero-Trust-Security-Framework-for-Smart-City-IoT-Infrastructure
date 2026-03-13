@@ -5,7 +5,7 @@
 
 const char *WIFI_SSID = "Omnitrix";
 const char *WIFI_PASSWORD = "12345678";
-const char *MQTT_HOST = "192.168.4.1";
+const char *MQTT_HOST = "broker.hivemq.com";
 const uint16_t MQTT_PORT = 1883;
 const char *MQTT_TOPIC_DATA = "smartcity/iot";
 const char *MQTT_TOPIC_TEST = "smartcity/test";

@@ -1,15 +1,16 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <uMQTTBroker.h>
 #include <ArduinoJson.h>
 #include <mbedtls/md.h>
 #include <mbedtls/sha256.h>
 
-const char *AP_SSID = "Omnitrix";
-const char *AP_PASSWORD = "12345678";
+const char *WIFI_SSID = "Omnitrix";
+const char *WIFI_PASSWORD = "12345678";
+const char *MQTT_HOST = "broker.hivemq.com";
 const uint16_t MQTT_PORT = 1883;
 const char *MQTT_TOPIC_DATA = "smartcity/iot";
 const char *MQTT_TOPIC_TEST = "smartcity/test";
+const char *DASHBOARD_TOPIC = "zerotrust/gobinath/iot/verified";
 
 const uint8_t MAX_MESSAGES_PER_MINUTE = 20;
 const uint8_t MAX_RATE_HISTORY = 24;
@@ -39,17 +40,12 @@ struct Block
     uint32_t timestamp;
 };
 
-class LocalBroker : public uMQTTBroker
-{
-};
-
 DeviceRecord deviceRegistry[] = {
     {"ENV_NODE_001", "env_secret_key_2025", MAX_MESSAGES_PER_MINUTE, false, {0}, 0},
     {"TRAFFIC_NODE_001", "traffic_secret_key_2025", MAX_MESSAGES_PER_MINUTE, false, {0}, 0},
     {"METER_NODE_001", "meter_secret_key_2025", MAX_MESSAGES_PER_MINUTE, false, {0}, 0},
 };
 
-LocalBroker broker;
 WiFiClient subscriberNetwork;
 PubSubClient subscriberClient(subscriberNetwork);
 
@@ -165,6 +161,43 @@ String summarizePayload(const String &type, JsonObject payload)
     return "Payload received";
 }
 
+void publishDashboardEvent(
+    const String &deviceId,
+    const String &deviceType,
+    JsonObject payloadValues,
+    const String &signature,
+    const String &eventHash,
+    bool verified,
+    const String &reason,
+    uint32_t timestamp,
+    const String &payloadPreview)
+{
+    if (!subscriberClient.connected())
+    {
+        return;
+    }
+
+    StaticJsonDocument<512> eventDoc;
+    eventDoc["device_id"] = deviceId;
+    eventDoc["device_type"] = deviceType;
+    eventDoc["temperature"] = payloadValues.containsKey("temperature") ? payloadValues["temperature"].as<float>() : 0;
+    eventDoc["humidity"] = payloadValues.containsKey("humidity") ? payloadValues["humidity"].as<int>() : 0;
+    eventDoc["signature"] = signature;
+    eventDoc["event_hash"] = eventHash;
+    eventDoc["verified"] = verified;
+    eventDoc["reason"] = reason;
+    eventDoc["timestamp"] = timestamp;
+    eventDoc["payload_preview"] = payloadPreview;
+
+    String body;
+    serializeJson(eventDoc, body);
+
+    if (!subscriberClient.publish(DASHBOARD_TOPIC, body.c_str()))
+    {
+        Serial.println("⚠️ Failed to publish dashboard event");
+    }
+}
+
 void createGenesisBlock()
 {
     Block &genesis = blockchain[0];
@@ -276,6 +309,9 @@ void handleDataMessage(byte *payload, unsigned int length)
         raw += static_cast<char>(payload[i]);
     }
 
+    Serial.print("Payload: ");
+    Serial.println(raw);
+
     StaticJsonDocument<768> wrapperDoc;
     DeserializationError err = deserializeJson(wrapperDoc, raw);
     if (err)
@@ -309,11 +345,17 @@ void handleDataMessage(byte *payload, unsigned int length)
     DeviceRecord *device = findDevice(deviceId);
     if (device == nullptr)
     {
+        String eventHash = sha256Hex(raw);
+        String payloadPreview = summarizePayload(type, payloadValues);
+        publishDashboardEvent(deviceId, type, payloadValues, receivedSignature, eventHash, false, "UNKNOWN_DEVICE", timestamp, payloadPreview);
         Serial.println("🚫 CHECK 1 FAILED — Unknown device");
         return;
     }
     if (device->quarantined)
     {
+        String eventHash = sha256Hex(raw);
+        String payloadPreview = summarizePayload(type, payloadValues);
+        publishDashboardEvent(deviceId, type, payloadValues, receivedSignature, eventHash, false, "QUARANTINED", timestamp, payloadPreview);
         Serial.println("🚫 CHECK 1 FAILED — Device quarantined");
         return;
     }
@@ -325,6 +367,9 @@ void handleDataMessage(byte *payload, unsigned int length)
     if (expectedSignature != receivedSignature)
     {
         device->quarantined = true;
+        String eventHash = sha256Hex(raw);
+        String payloadPreview = summarizePayload(type, payloadValues);
+        publishDashboardEvent(deviceId, type, payloadValues, receivedSignature, eventHash, false, "BAD_SIGNATURE", timestamp, payloadPreview);
         Serial.println("🚫 CHECK 2 FAILED — Bad signature -> QUARANTINED");
         return;
     }
@@ -334,6 +379,9 @@ void handleDataMessage(byte *payload, unsigned int length)
     if (exceedsRateLimit(*device, now))
     {
         device->quarantined = true;
+        String eventHash = sha256Hex(raw);
+        String payloadPreview = summarizePayload(type, payloadValues);
+        publishDashboardEvent(deviceId, type, payloadValues, receivedSignature, eventHash, false, "RATE_EXCEEDED", timestamp, payloadPreview);
         Serial.println("🚫 CHECK 3 FAILED — Rate Exceeded -> QUARANTINED");
         return;
     }
@@ -342,6 +390,8 @@ void handleDataMessage(byte *payload, unsigned int length)
 
     String preview = summarizePayload(type, payloadValues);
     addBlock(deviceId, type, canonicalData, preview, timestamp);
+    String blockHash = (blockCount > 0) ? blockchain[blockCount - 1].hash : sha256Hex(raw);
+    publishDashboardEvent(deviceId, type, payloadValues, receivedSignature, blockHash, true, "OK", timestamp, preview);
 
     Serial.print("✅ AUTHENTICATED — ");
     Serial.println(preview);
@@ -375,8 +425,7 @@ void ensureSubscriberConnected()
         return;
     }
 
-    IPAddress localIp = WiFi.softAPIP();
-    subscriberClient.setServer(localIp, MQTT_PORT);
+    subscriberClient.setServer(MQTT_HOST, MQTT_PORT);
     subscriberClient.setCallback(mqttCallback);
     subscriberClient.setBufferSize(1024);
 
@@ -386,7 +435,7 @@ void ensureSubscriberConnected()
         if (subscriberClient.connect(clientId.c_str()))
         {
             subscriberClient.subscribe("smartcity/#");
-            Serial.println("Gateway subscriber connected to local broker");
+            Serial.println("Gateway subscriber connected to MQTT broker");
             return;
         }
 
@@ -429,15 +478,29 @@ void setup()
     Serial.begin(115200);
     delay(500);
 
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(AP_SSID, AP_PASSWORD);
-    IPAddress ip = WiFi.softAPIP();
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print("Connecting to WiFi");
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 40)
+    {
+        delay(250);
+        Serial.print(".");
+        attempts++;
+    }
+    Serial.println();
 
     Serial.println("=== ZERO TRUST GATEWAY ACTIVE ===");
-    Serial.print("Gateway IP: ");
-    Serial.println(ip);
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.print("Gateway IP: ");
+        Serial.println(WiFi.localIP());
+    }
+    else
+    {
+        Serial.println("WiFi connection failed");
+    }
 
-    broker.init(MQTT_PORT);
     createGenesisBlock();
     ensureSubscriberConnected();
     printHelp();
